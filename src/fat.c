@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/mman.h>
 
 #include "common.h"
 #include "fsck.fat.h"
@@ -168,29 +169,35 @@ void read_fat(DOS_FS * fs, int mode)
 	    fs_write(fs->fat_start + fs->fat_size, eff_size, first);
 	} else if (!first_ok && second_ok) {
 	    printf("FATs differ - using second FAT.\n");
-	    fs_write(fs->fat_start, eff_size, second);
-	    memcpy(first, second, eff_size);
-	} else {
-	    if (first_ok && second_ok)
-		printf("FATs differ but appear to be intact.\n");
-	    else
-		printf("FATs differ and both appear to be corrupt.\n");
-	    if (get_choice(1, "  Using first FAT.",
-			   2,
-			   1, "Use first FAT",
-			   2, "Use second FAT") == 1) {
-		if (!first_ok) {
-		    fix_first_cluster(fs, first);
-		    fs_write(fs->fat_start, (fs->fat_bits + 7) / 8, first);
-		}
-		fs_write(fs->fat_start + fs->fat_size, eff_size, first);
-	    } else {
-		if (!second_ok) {
-		    fix_first_cluster(fs, second);
-		    fs_write(fs->fat_start + fs->fat_size, (fs->fat_bits + 7) / 8, second);
-		}
+	    if (!use_mmap) {
 		fs_write(fs->fat_start, eff_size, second);
-		memcpy(first, second, eff_size);
+	    }
+	    memcpy(first, second, eff_size);
+	}
+	if (first_ok && second_ok) {
+	    if (interactive) {
+		printf("FATs differ but appear to be intact. Use which FAT ?\n"
+		       "1) Use first FAT\n2) Use second FAT\n");
+		if (get_key("12", "?") == '1') {
+		    if (use_mmap) {
+			memcpy(second, first, eff_size);
+		    } else {
+			fs_write(fs->fat_start + fs->fat_size, eff_size, first);
+		    }
+		} else {
+		    if (!use_mmap) {
+			fs_write(fs->fat_start, eff_size, second);
+		    }
+		    memcpy(first, second, eff_size);
+		}
+	    } else {
+		printf("FATs differ but appear to be intact. Using first "
+		       "FAT.\n");
+		if (use_mmap) {
+		    memcpy(second, first, eff_size);
+		} else {
+		    fs_write(fs->fat_start + fs->fat_size, eff_size, first);
+		}
 	    }
 	}
     }
@@ -216,7 +223,11 @@ void read_fat(DOS_FS * fs, int mode)
         }
     }
     if (second) {
-	free(second);
+	if (use_mmap) {
+	    fs_munmap(second, eff_size);
+	} else {
+	    free(second);
+	}
     }
     fs->fat = (unsigned char *)first;
 
@@ -328,7 +339,9 @@ void set_fat(DOS_FS * fs, uint32_t cluster, int32_t new)
     default:
 	die("Bad FAT entry size: %d bits.", fs->fat_bits);
     }
-    fs_write(offs, size, data);
+    if (!use_mmap) {
+	fs_write(offs, size, data);
+    }
     if (fs->nfats > 1) {
 	fs_write(offs + fs->fat_size, size, data);
     }

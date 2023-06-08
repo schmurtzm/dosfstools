@@ -175,9 +175,8 @@ typedef struct {
     char label[11];
 } DOS_FS;
 
-extern int rw, list, verbose, test, no_spaces_in_sfns;
-extern long fat_table;
-extern int only_uppercase_label;
+extern int interactive, rw, list, verbose, test, write_immed;
+extern int atari_format, use_mmap;
 extern unsigned n_files;
 extern void *mem_queue;
 

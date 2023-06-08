@@ -99,7 +99,7 @@ static void usage(char *name, int exitval)
 int main(int argc, char **argv)
 {
     DOS_FS fs;
-    int salvage_files, verify, c;
+    int salvage_files, no_salvage_files, verify, c;
     uint32_t free_clusters = 0;
     struct termios tio;
     char *tmp;
@@ -169,6 +169,9 @@ int main(int argc, char **argv)
 	case 'l':
 	    list = 1;
 	    break;
+	case 'm':
+	    use_mmap = 1;
+	    break;
 	case 'n':
 	    rw = 0;
 	    interactive = 0;
@@ -225,6 +228,12 @@ int main(int argc, char **argv)
 	fprintf(stderr, "-t and -w can not be used in read only mode\n");
 	exit(2);
     }
+    if (use_mmap && !write_immed) {
+	fprintf(stderr, "-m requires explicit -w and -a or -r\n");
+	exit(2);
+    }
+    if (no_salvage_files)
+	salvage_files = 0;
     if (optind != argc - 1)
 	usage(argv[0], 2);
 

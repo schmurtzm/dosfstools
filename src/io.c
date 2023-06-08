@@ -66,6 +66,36 @@ void fs_open(const char *path, int rw)
     did_change = 0;
 }
 
+void *fs_mmap(loff_t pos, int size)
+{
+    char *mapped; /* Convert to char* to be able to add an offset to it */
+    unsigned long pagesize = sysconf(_SC_PAGESIZE);
+    int pos_correction = pos % pagesize;
+
+    /* mmap requires page-aligned offset and size */
+    pos -= pos_correction;
+    size += pos_correction;
+    size = (size + pagesize - 1) / pagesize * pagesize;
+    mapped = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, pos);
+    if (mapped == MAP_FAILED)
+	pdie("mmapping %d bytes at 0x%08lx", size, (unsigned long)pos);
+    return mapped + pos_correction;
+}
+
+void fs_munmap(void *mapped, int size)
+{
+    unsigned long addr = (unsigned long) mapped;
+    unsigned long pagesize = sysconf(_SC_PAGESIZE);
+    int pos_correction = addr % pagesize;
+
+    addr -= pos_correction;
+    size += pos_correction;
+    /* for munmap, size doesn't have to be a multiple of pagesize */
+    mapped = (void *)addr;
+    if (munmap(mapped, size))
+	pdie("munmapping %d bytes from %p", size, mapped);
+}
+
 /**
  * Read data from the partition, accounting for any pending updates that are
  * queued for writing.
